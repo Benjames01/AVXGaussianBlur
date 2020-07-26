@@ -3,6 +3,60 @@
 
 using namespace std;
 
+__declspec(align(64))  unsigned short int conv_hx[N][M];
+
+void addIntsToArray(__m256i vec, int index, unsigned short int out_array[]) {
+	uint16_t* i = (uint16_t*)&vec;
+	int total = 0;
+
+	for (int x = 0; x < 5; x++) {
+		out_array[index + x] = i[x];
+	}
+}
+
+int getVectorSum(__m256i vec) {
+	uint16_t* i = (uint16_t*)&vec;
+	int total = 0;
+
+	for (int x = 0; x < 16; x++) {
+		total += i[x];
+	}
+	return total;
+}
+
+void printVector(__m256i vec, string name) {
+	uint16_t* i = (uint16_t*)&vec;
+	cout << name;
+	for (int x = 0; x < 16; x++) {
+		cout << i[x] << " ";
+	}
+	cout << endl;
+}
+
+void debugPrint(const char const* debugText)
+{
+	#ifdef DEBUG
+		printf(debugText);
+	#endif // DEBUG
+}
+
+void writeMatrixToFile(string name, unsigned short int matrix[N][M]) {
+#ifdef DEBUG
+	fstream myfile;
+	myfile.open(name, fstream::out);
+
+	for (int i = 0; i < 10; i++)
+	{
+		for (int j = 0; j < 100; j++)
+		{
+			myfile << matrix[i][j] << "\t";
+		}
+		myfile << std::endl;
+	}
+	myfile.close();
+#endif // DEBUG
+}
+
 int main() {
 	//the following command pins the current process to the 1st core
 	//otherwise, the OS tongles this process between different cores
@@ -21,9 +75,7 @@ int main() {
 
 	for (int it = 0; it != TIMES; it++) {
 		//Gaussian_Blur_default_unrolled();
-		Gaussian_Blur_AVX(); // Average: 6.72602 s for TIMES==100
-		//Gaussian_Blur_Separable();// Average 2.48279 s for TIMES=100
-		//Gaussian_Blur_Separable_AVX(); // Average 6.3694 s for TIMES==100
+		Gaussian_Blur_AVX(); // Average: 6.41431 s for TIMES==100
 		//Gaussian_Blur_default(); // Average: 11.9685 s for TIMES==100
 	}
 
@@ -102,7 +154,7 @@ void Gaussian_Blur_Separable_AVX() {
 				conv += hy[i2 + 2] * conv_hx[i][j + i2];
 			}
 
-			filt_image[i][j] = conv / 144; // Normalise output by dividing by sum of kernel
+			filt_image[i][j] = conv / 159; // Normalise output by dividing by sum of kernel
 		}
 	}
 	//writeMatrixToFile("conv_separable_avx.txt", filt_image);
@@ -144,7 +196,7 @@ void Gaussian_Blur_Separable() {
 				conv += hy[i2 + 2] * conv_hx[i][j + i2];
 			}
 
-			filt_image[i][j] = conv / 144;
+			filt_image[i][j] = conv / 159;
 		}
 	}
 	writeMatrixToFile("conv_seperable.txt", conv_hx);
@@ -158,9 +210,9 @@ void Gaussian_Blur_AVX() {
 	int row, col;
 
 	//NxN convolution
-	const0 = _mm256_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 3, 4, 3, 1);
-	const1 = _mm256_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 9, 12, 9, 3);
-	const2 = _mm256_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 12, 16, 12, 4);
+	const0 = _mm256_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 4, 5, 4, 2);
+	const1 = _mm256_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 9, 12, 9, 4);
+	const2 = _mm256_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 12, 15, 12, 5);
 
 	for (row = 2; row < N - 2; row++) {
 		for (col = 2; col < M - 14; col++) {
@@ -188,7 +240,7 @@ void Gaussian_Blur_AVX() {
 			t0 = _mm256_add_epi16(t0, r4);
 
 			// Calculate output pixel and normalise it by dividing by sum of kernel
-			filt_image[row][col] = getVectorSum(t0) / 144;
+			filt_image[row][col] = getVectorSum(t0) / 159;
 		}
 
 		// padding required to avoid going out of bounds
@@ -200,7 +252,7 @@ void Gaussian_Blur_AVX() {
 				}
 			}
 			// Calculate output pixel and normalise it by dividing by sum of kernel
-			filt_image[row][col] = temp / 144;
+			filt_image[row][col] = temp / 159;
 		}
 	}
 	writeMatrixToFile("conv_avx.txt", filt_image);
@@ -245,7 +297,7 @@ void Gaussian_Blur_default_unrolled() {
 			newPixel += in_image[row + 2][col + 1] * gaussianMask[4][3];
 			newPixel += in_image[row + 2][col + 2] * gaussianMask[4][4];
 
-			filt_image[row][col] = newPixel / 144;
+			filt_image[row][col] = newPixel / 159;
 		}
 	}
 }
@@ -264,7 +316,7 @@ void Gaussian_Blur_default() {
 						* gaussianMask[2 + rowOffset][2 + colOffset];
 				}
 			}
-			filt_image[row][col] = newPixel / 144;
+			filt_image[row][col] = newPixel / 159;
 		}
 	}
 }
@@ -285,7 +337,7 @@ bool compare_Gaussian_images() {
 					newPixel += in_image[row + rowOffset][col + colOffset] * gaussianMask[2 + rowOffset][2 + colOffset];
 				}
 			}
-			newPixel = newPixel / 144;
+			newPixel = newPixel / 159;
 			if (newPixel != filt_image[row][col]) {
 				printf("\n %d %d - %d %d\n", row, col, newPixel, filt_image[row][col]);
 				if (count == 9 & !passed)
@@ -534,56 +586,4 @@ void print_message(char* s, bool outcome) {
 		printf("\n\n\r ----- %s output is correct -----\n\r", s);
 	else
 		printf("\n\n\r -----%s output is INcorrect -----\n\r", s);
-}
-
-void addIntsToArray(__m256i vec, int index, unsigned short int out_array[]) {
-	uint16_t* i = (uint16_t*)&vec;
-	int total = 0;
-
-	for (int x = 0; x < 5; x++) {
-		out_array[index + x] = i[x];
-	}
-}
-
-int getVectorSum(__m256i vec) {
-	uint16_t* i = (uint16_t*)&vec;
-	int total = 0;
-
-	for (int x = 0; x < 16; x++) {
-		total += i[x];
-	}
-	return total;
-}
-
-void printVector(__m256i vec, string name) {
-	uint16_t* i = (uint16_t*)&vec;
-	cout << name;
-	for (int x = 0; x < 16; x++) {
-		cout << i[x] << " ";
-	}
-	cout << endl;
-}
-
-void debugPrint(const char const* debugText)
-{
-#ifdef DEBUG
-	printf(debugText);
-#endif // DEBUG
-}
-
-void writeMatrixToFile(string name, unsigned short int matrix[N][M]) {
-#ifdef DEBUG
-	fstream myfile;
-	myfile.open(name, fstream::out);
-
-	for (int i = 0; i < 10; i++)
-	{
-		for (int j = 0; j < 100; j++)
-		{
-			myfile << matrix[i][j] << "\t";
-		}
-		myfile << std::endl;
-	}
-	myfile.close();
-#endif // DEBUG
 }
