@@ -13,6 +13,37 @@ int getVectorSum(__m256i vec) {
 	return total;
 }
 
+__m256i hadd_widen16_to_32(__m256i a) {
+	// int16_t, int16_t
+	return _mm256_madd_epi16(a, _mm256_set_epi16(1, 1, 1, 1, 1, 1, 1, 1,1 ,1, 1, 1, 1, 1, 1, 1));
+}
+
+uint32_t hsum_epi32_avx(__m128i x)
+{
+	__m128i hi64 = _mm_unpackhi_epi64(x, x);          
+	__m128i sum64 = _mm_add_epi32(hi64, x);
+	__m128i hi32 = _mm_shuffle_epi32(sum64, _MM_SHUFFLE(2, 3, 0, 1));
+	__m128i sum32 = _mm_add_epi32(sum64, hi32);
+	return _mm_cvtsi128_si32(sum32);
+}
+
+uint32_t hsum_8x32(__m256i v)
+{
+	__m128i sum128 = _mm_add_epi32(
+		_mm256_castsi256_si128(v),
+		_mm256_extracti128_si256(v, 1)); 
+	return hsum_epi32_avx(sum128);
+}
+
+
+int hozSum(__m256i vec) {
+
+	__m256i widened = hadd_widen16_to_32(vec);
+
+	return hsum_8x32(widened);
+}
+
+
 int main() {
 	//the following command pins the current process to the 1st core
 	//otherwise, the OS tongles this process between different cores
@@ -31,8 +62,8 @@ int main() {
 
 	for (int it = 0; it != TIMES; it++) {
 		//Gaussian_Blur_default_unrolled();
-		Gaussian_Blur_AVX(); // Average: 6.41431 s for TIMES==100
-		//Gaussian_Blur_default(); // Average: 11.9685 s for TIMES==100
+		Gaussian_Blur_AVX(); // Average:  5.33228 s for TIMES==1000
+		//Gaussian_Blur_default(); // Average: 14.7345 s for TIMES==100
 	}
 
 	auto finish = std::chrono::high_resolution_clock::now();
@@ -68,6 +99,7 @@ int main() {
 	return 0;
 }
 
+bool debug = false;
 void Gaussian_Blur_AVX() {
 	__m256i r0, r1, r2, r3, r4, t0;
 	__m256i const0, const1, const2;
@@ -75,9 +107,15 @@ void Gaussian_Blur_AVX() {
 	int row, col;
 
 	//NxN convolution
+	const0 = _mm256_set_epi16(0, 2, 4, 5, 4, 2, 0, 0, 0, 0, 0, 2, 4, 5, 4, 2);
+	const1 = _mm256_set_epi16(0, 4, 9, 12, 9, 4, 0, 0, 0, 0, 0, 4, 9, 12, 9, 4);
+	const2 = _mm256_set_epi16(0, 5, 12, 15, 12, 5, 0, 0, 0, 0, 0, 5, 12, 15, 12, 5);
+
 	const0 = _mm256_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 4, 5, 4, 2);
 	const1 = _mm256_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 9, 12, 9, 4);
 	const2 = _mm256_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 12, 15, 12, 5);
+
+
 
 	for (row = 2; row < N - 2; row++) {
 		for (col = 2; col < M - 14; col++) {
@@ -105,7 +143,7 @@ void Gaussian_Blur_AVX() {
 			t0 = _mm256_add_epi16(t0, r4);
 
 			// Calculate output pixel and normalise it by dividing by sum of kernel
-			filt_image[row][col] = getVectorSum(t0) / 159;
+			filt_image[row][col] = hozSum(t0) / 159;
 		}
 
 		// padding required to avoid going out of bounds
