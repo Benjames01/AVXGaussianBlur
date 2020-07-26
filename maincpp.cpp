@@ -21,10 +21,10 @@ int main() {
 
 	for (int it = 0; it != TIMES; it++) {
 		//Gaussian_Blur_default_unrolled();
-		//Gaussian_Blur_AVX();
-		//Gaussian_Blur_Seperable();
-		Gaussian_Blur_Seperable_AVX();
-		//Gaussian_Blur_default();
+		Gaussian_Blur_AVX(); // Average: 6.72602 s for TIMES==100
+		//Gaussian_Blur_Separable();// Average 2.48279 s for TIMES=100
+		//Gaussian_Blur_Separable_AVX(); // Average 6.3694 s for TIMES==100
+		//Gaussian_Blur_default(); // Average: 11.9685 s for TIMES==100
 	}
 
 	auto finish = std::chrono::high_resolution_clock::now();
@@ -60,7 +60,7 @@ int main() {
 	return 0;
 }
 
-void Gaussian_Blur_Seperable_AVX() {
+void Gaussian_Blur_Separable_AVX() {
 	// kernel separated as two 1d kernels
 	// Nx1 -> 1xN convolution
 	__m256i const0 = _mm256_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 3, 4, 3, 1); // Horizontal pass
@@ -72,6 +72,8 @@ void Gaussian_Blur_Seperable_AVX() {
 	int conv;
 
 	int count = 0;
+
+	// Horizontal pass
 	for (i = 0; i < M; i++) {
 		for (j = 0; j < N - 14; j++) {
 			conv = 0;
@@ -91,7 +93,7 @@ void Gaussian_Blur_Seperable_AVX() {
 		}
 	}
 
-	int count2 = 0;
+	// Vertical pass
 	for (i = 0; i < M; i++) {
 		for (j = 0; j < N; j++) {
 			conv = 0;
@@ -103,11 +105,11 @@ void Gaussian_Blur_Seperable_AVX() {
 			filt_image[i][j] = conv / 144; // Normalise output by dividing by sum of kernel
 		}
 	}
-	writeMatrixToFile("conv_separable_avx.txt", filt_image);
-	writeMatrixToFile("filt_separable_avx.txt", filt_image);
+	//writeMatrixToFile("conv_separable_avx.txt", filt_image);
+	//writeMatrixToFile("filt_separable_avx.txt", filt_image);
 }
 
-void Gaussian_Blur_Seperable() {
+void Gaussian_Blur_Separable() {
 	int hx[] = { 1,3,4,3,1 };
 	int hy[] = { 1,3,4,3,1 };
 

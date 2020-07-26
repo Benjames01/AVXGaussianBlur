@@ -13,7 +13,7 @@
 
 #define N 1024 // rows
 #define M 1024 // columns
-#define TIMES 1 // number of iterations of blur function (recommended: 100)
+#define TIMES 100 // number of iterations of blur function (recommended: 100)
 
 #define P 1024
 
@@ -21,8 +21,8 @@
 
 void Gaussian_Blur_AVX();
 void Gaussian_Blur_SSE();
-void Gaussian_Blur_Seperable_AVX();
-void Gaussian_Blur_Seperable();
+void Gaussian_Blur_Separable_AVX();
+void Gaussian_Blur_Separable();
 void Gaussian_Blur_default();
 void Gaussian_Blur_default_unrolled();
 bool compare_Gaussian_images();
@@ -63,7 +63,7 @@ char message[20];
 void print_message(char* s, bool outcome);
 
 //PLEASE AMEND THE DIRECTORY BELOW
-char in[100] = "D:\\UNI WORK\\Coursework\\Coursework\\AVXGaussianBlur\\rec.pgm";
+char in[100] = "D:\\UNI WORK\\Coursework\\Coursework\\rec.pgm";
 char out[100] = "D:\\UNI WORK\\Coursework\\Coursework\\output\\filtered.pgm";
 char out2[100] = "D:\\UNI WORK\\Coursework\\Coursework\\output\\gradient.pgm";
 
