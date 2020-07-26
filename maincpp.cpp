@@ -91,11 +91,11 @@ void Gaussian_Blur_AVX() {
 			r4 = _mm256_loadu_si256((__m256i*) & in_image[row + 2][col - 2]);
 
 			// Multiply each row by corresponding kernel row
-			r0 = _mm256_madd_epi16(r0, const0);
-			r1 = _mm256_madd_epi16(r1, const1);
-			r2 = _mm256_madd_epi16(r2, const2);
-			r3 = _mm256_madd_epi16(r3, const1);
-			r4 = _mm256_madd_epi16(r4, const0);
+			r0 = _mm256_mullo_epi16(r0, const0);
+			r1 = _mm256_mullo_epi16(r1, const1);
+			r2 = _mm256_mullo_epi16(r2, const2);
+			r3 = _mm256_mullo_epi16(r3, const1);
+			r4 = _mm256_mullo_epi16(r4, const0);
 
 			// Calculate the sum of the adjacent rows
 			t0 = _mm256_add_epi16(t0, r0);
