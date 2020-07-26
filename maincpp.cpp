@@ -3,17 +3,6 @@
 
 using namespace std;
 
-__declspec(align(64))  unsigned short int conv_hx[N][M];
-
-void addIntsToArray(__m256i vec, int index, unsigned short int out_array[]) {
-	uint16_t* i = (uint16_t*)&vec;
-	int total = 0;
-
-	for (int x = 0; x < 5; x++) {
-		out_array[index + x] = i[x];
-	}
-}
-
 int getVectorSum(__m256i vec) {
 	uint16_t* i = (uint16_t*)&vec;
 	int total = 0;
@@ -22,39 +11,6 @@ int getVectorSum(__m256i vec) {
 		total += i[x];
 	}
 	return total;
-}
-
-void printVector(__m256i vec, string name) {
-	uint16_t* i = (uint16_t*)&vec;
-	cout << name;
-	for (int x = 0; x < 16; x++) {
-		cout << i[x] << " ";
-	}
-	cout << endl;
-}
-
-void debugPrint(const char const* debugText)
-{
-	#ifdef DEBUG
-		printf(debugText);
-	#endif // DEBUG
-}
-
-void writeMatrixToFile(string name, unsigned short int matrix[N][M]) {
-#ifdef DEBUG
-	fstream myfile;
-	myfile.open(name, fstream::out);
-
-	for (int i = 0; i < 10; i++)
-	{
-		for (int j = 0; j < 100; j++)
-		{
-			myfile << matrix[i][j] << "\t";
-		}
-		myfile << std::endl;
-	}
-	myfile.close();
-#endif // DEBUG
 }
 
 int main() {
@@ -112,97 +68,6 @@ int main() {
 	return 0;
 }
 
-void Gaussian_Blur_Separable_AVX() {
-	// kernel separated as two 1d kernels
-	// Nx1 -> 1xN convolution
-	__m256i const0 = _mm256_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 3, 4, 3, 1); // Horizontal pass
-	int hy[] = { 1,3,4,3,1 }; // Vertical pass
-
-	__m256i r0;
-
-	int i, j, i2, j2;
-	int conv;
-
-	int count = 0;
-
-	// Horizontal pass
-	for (i = 0; i < M; i++) {
-		for (j = 0; j < N - 14; j++) {
-			conv = 0;
-
-			r0 = _mm256_loadu_si256((__m256i*) & in_image[i][j - 2]);
-			r0 = _mm256_mullo_epi16(r0, const0);
-
-			int total = _mm256_extract_epi16(r0, 0);
-			total += _mm256_extract_epi16(r0, 1);
-			total += _mm256_extract_epi16(r0, 2);
-			total += _mm256_extract_epi16(r0, 3);
-			total += _mm256_extract_epi16(r0, 4);
-
-			int total2 = getVectorSum(r0);
-
-			conv_hx[i][j] = total;
-		}
-	}
-
-	// Vertical pass
-	for (i = 0; i < M; i++) {
-		for (j = 0; j < N; j++) {
-			conv = 0;
-
-			for (i2 = -2; i2 <= 2; i2++) {
-				conv += hy[i2 + 2] * conv_hx[i][j + i2];
-			}
-
-			filt_image[i][j] = conv / 159; // Normalise output by dividing by sum of kernel
-		}
-	}
-	//writeMatrixToFile("conv_separable_avx.txt", filt_image);
-	//writeMatrixToFile("filt_separable_avx.txt", filt_image);
-}
-
-void Gaussian_Blur_Separable() {
-	int hx[] = { 1,3,4,3,1 };
-	int hy[] = { 1,3,4,3,1 };
-
-	int i, j, i2, j2;
-	int index, index2;
-	unsigned short conv;
-	int count = 0;
-
-	for (i = 0; i < M; i++) {
-		for (j = 0; j < N; j++) {
-			conv = 0;
-			for (j2 = -2; j2 <= 2; j2++) {
-				// bounds check for column index
-				/*if (j + j2 < 0 || j + j2 > N)
-					continue;*/
-
-				conv += hx[j2 + 2] * in_image[i][j + j2];
-			} // for(j2)
-			conv_hx[i][j] = conv;
-		}
-	}
-
-	for (i = 0; i < M; i++) {
-		for (j = 0; j < N; j++) {
-			conv = 0;
-
-			for (i2 = -2; i2 <= 2; i2++) {
-				// bounds check for row index
-				/*if (i + i2 < 0 || i + i2 > M)
-					continue;*/
-
-				conv += hy[i2 + 2] * conv_hx[i][j + i2];
-			}
-
-			filt_image[i][j] = conv / 159;
-		}
-	}
-	writeMatrixToFile("conv_seperable.txt", conv_hx);
-	writeMatrixToFile("filt_separable.txt", filt_image);
-}
-
 void Gaussian_Blur_AVX() {
 	__m256i r0, r1, r2, r3, r4, t0;
 	__m256i const0, const1, const2;
@@ -255,7 +120,6 @@ void Gaussian_Blur_AVX() {
 			filt_image[row][col] = temp / 159;
 		}
 	}
-	writeMatrixToFile("conv_avx.txt", filt_image);
 }
 
 void Gaussian_Blur_default_unrolled() {
