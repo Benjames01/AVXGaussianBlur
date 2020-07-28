@@ -1,48 +1,120 @@
 #include "Header.h"
 #include <fstream>
+#include <iomanip>
 
 using namespace std;
 
-int getVectorSum(__m256i vec) {
-	uint16_t* i = (uint16_t*)&vec;
-	int total = 0;
+int hsumAlternative(__m256i vec) {
+	// Avoid overflow by widening to 32-bit
+	__m256i widened = _mm256_madd_epi16(vec, _mm256_set_epi16(1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1));
 
-	for (int x = 0; x < 16; x++) {
-		total += i[x];
-	}
-	return total;
-}
+	__m128i sum128 = _mm_add_epi32(
+		_mm256_castsi256_si128(widened),	// low half
+		_mm256_extracti128_si256(widened, 1));	// high half
 
-__m256i hadd_widen16_to_32(__m256i a) {
-	// int16_t, int16_t
-	return _mm256_madd_epi16(a, _mm256_set_epi16(1, 1, 1, 1, 1, 1, 1, 1,1 ,1, 1, 1, 1, 1, 1, 1));
-}
-
-uint32_t hsum_epi32_avx(__m128i x)
-{
-	__m128i hi64 = _mm_unpackhi_epi64(x, x);          
-	__m128i sum64 = _mm_add_epi32(hi64, x);
-	__m128i hi32 = _mm_shuffle_epi32(sum64, _MM_SHUFFLE(2, 3, 0, 1));
+	__m128i hi64 = _mm_unpackhi_epi64(sum128, sum128);
+	__m128i sum64 = _mm_add_epi32(hi64, sum128);
+	__m128i hi32 = _mm_shuffle_epi32(sum64, _MM_SHUFFLE(2, 3, 0, 1));	// Swap two low elements
 	__m128i sum32 = _mm_add_epi32(sum64, hi32);
+
+
 	return _mm_cvtsi128_si32(sum32);
 }
 
-uint32_t hsum_8x32(__m256i v)
-{
-	__m128i sum128 = _mm_add_epi32(
-		_mm256_castsi256_si128(v),
-		_mm256_extracti128_si256(v, 1)); 
-	return hsum_epi32_avx(sum128);
+void printVector(__m256i vec, string name) {
+	uint16_t* i = (uint16_t*)&vec;
+	cout << name;
+	for (int x = 0; x < 16; x++) {
+		cout << i[x] << " ";
+	}
+	cout << endl;
 }
 
+void Gaussian_Blur_AVX_mop() {
+	__m256i r0, r1, r2, r3, r4, t0;
+	__m256i r5, r6, r7, r8, r9;
 
-int hozSum(__m256i vec) {
+	__m256i const0, const1, const2;
+	__m256i const3, const4, const5;
 
-	__m256i widened = hadd_widen16_to_32(vec);
+	int row, col;
 
-	return hsum_8x32(widened);
+	//NxN convolution
+	const0 = _mm256_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 4, 5, 4, 2);
+	const1 = _mm256_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 9, 12, 9, 4);
+	const2 = _mm256_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 12, 15, 12, 5);
+
+	const3 = _mm256_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 4, 5, 4, 2, 0, 0);
+	const4 = _mm256_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 9, 12, 9, 4, 0, 0);
+	const5 = _mm256_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 12, 15, 12, 2, 0, 0);
+
+	for (row = 2; row < N - 2; row++) {
+		// Avoid going out of bounds M-15
+		for (col = 2; col < M - 15; col += 6) {
+
+			for (int col2 = 0; col2 < 6; col2++) {
+				t0 = _mm256_setzero_si256();
+				
+				// Load 256 bits of packed integers from 5 adjacent rows
+				r0 = _mm256_loadu_si256((__m256i*) & in_image[row - 2][col + col2 - 2]);
+				r1 = _mm256_loadu_si256((__m256i*) & in_image[row - 1][col + col2 - 2]);
+				r2 = _mm256_loadu_si256((__m256i*) & in_image[row][col + col2 - 2]);
+				r3 = _mm256_loadu_si256((__m256i*) & in_image[row + 1][col + col2 - 2]);
+				r4 = _mm256_loadu_si256((__m256i*) & in_image[row + 2][col + col2 - 2]);
+
+				// Multiply each row by corresponding kernel row
+				r5 = _mm256_mullo_epi16(r0, const0);
+				r6 = _mm256_mullo_epi16(r1, const1);
+				r7 = _mm256_mullo_epi16(r2, const2);
+				r8 = _mm256_mullo_epi16(r3, const1);
+				r9 = _mm256_mullo_epi16(r4, const0);
+
+				// Calculate the sum of the adjacent rows
+				t0 = _mm256_add_epi16(t0, r5);
+				t0 = _mm256_add_epi16(t0, r6);
+				t0 = _mm256_add_epi16(t0, r7);
+				t0 = _mm256_add_epi16(t0, r8);
+				t0 = _mm256_add_epi16(t0, r9);
+
+				int firstOutputPixel = hsumAlternative(t0) / 159;
+				filt_image[row][col + col2] = firstOutputPixel;
+
+				if (col + col2 + 12 == 1021)
+					continue;
+
+				r5 = _mm256_mullo_epi16(r0, const3);
+				r6 = _mm256_mullo_epi16(r1, const4);
+				r7 = _mm256_mullo_epi16(r2, const5);
+				r8 = _mm256_mullo_epi16(r3, const4);
+				r9 = _mm256_mullo_epi16(r4, const3);
+
+				t0 = _mm256_add_epi16(t0, r5);
+				t0 = _mm256_add_epi16(t0, r6);
+				t0 = _mm256_add_epi16(t0, r7);
+				t0 = _mm256_add_epi16(t0, r8);
+				t0 = _mm256_add_epi16(t0, r9);
+
+				int secondOutputPixel = hsumAlternative(t0) / 159;
+
+				// Calculate output pixel and normalise it by dividing by sum of kernel
+				
+				filt_image[row][col + col2 + 12] = secondOutputPixel;	
+			}
+		}
+
+		// padding required to avoid going out of bounds
+		for (col = 1009; col < M - 2; col++) {
+			int temp = 0;
+			for (int rowoffset = -2; rowoffset <= 2; rowoffset++) {
+				for (int coloffset = -2; coloffset <= 2; coloffset++) {
+					temp += in_image[row + rowoffset][col + coloffset] * gaussianMask[2 + rowoffset][2 + coloffset];
+				}
+			}
+			// Calculate output pixel and normalise it by dividing by sum of kernel
+			filt_image[row][col] = temp / 159;
+		}
+	}
 }
-
 
 int main() {
 	//the following command pins the current process to the 1st core
@@ -62,10 +134,10 @@ int main() {
 
 	for (int it = 0; it != TIMES; it++) {
 		//Gaussian_Blur_default_unrolled();
-		Gaussian_Blur_AVX(); // Average:  5.33228 s for TIMES==1000
-		//Gaussian_Blur_default(); // Average: 14.7345 s for TIMES==100
+		//Gaussian_Blur_AVX_mop(); // Average: 6.52933 for TIMES=500
+		//Gaussian_Blur_AVX(); // Average:  5.12537 s for TIMES=500
+		//Gaussian_Blur_default(); // Average: 11.8869 s for TIMES=500
 	}
-
 	auto finish = std::chrono::high_resolution_clock::now();
 	std::chrono::duration<double> elapsed = finish - start;
 	std::cout << "Gaussian blur Elapsed time: " << elapsed.count() << " s\n";
@@ -99,7 +171,6 @@ int main() {
 	return 0;
 }
 
-bool debug = false;
 void Gaussian_Blur_AVX() {
 	__m256i r0, r1, r2, r3, r4, t0;
 	__m256i const0, const1, const2;
@@ -107,18 +178,12 @@ void Gaussian_Blur_AVX() {
 	int row, col;
 
 	//NxN convolution
-	const0 = _mm256_set_epi16(0, 2, 4, 5, 4, 2, 0, 0, 0, 0, 0, 2, 4, 5, 4, 2);
-	const1 = _mm256_set_epi16(0, 4, 9, 12, 9, 4, 0, 0, 0, 0, 0, 4, 9, 12, 9, 4);
-	const2 = _mm256_set_epi16(0, 5, 12, 15, 12, 5, 0, 0, 0, 0, 0, 5, 12, 15, 12, 5);
-
 	const0 = _mm256_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 4, 5, 4, 2);
 	const1 = _mm256_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 9, 12, 9, 4);
 	const2 = _mm256_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 12, 15, 12, 5);
 
-
-
 	for (row = 2; row < N - 2; row++) {
-		for (col = 2; col < M - 14; col++) {
+		for (col = 2; col < M - 15; col++) {
 			t0 = _mm256_setzero_si256();
 
 			// Load 256 bits of packed integers from 5 adjacent rows
@@ -143,11 +208,11 @@ void Gaussian_Blur_AVX() {
 			t0 = _mm256_add_epi16(t0, r4);
 
 			// Calculate output pixel and normalise it by dividing by sum of kernel
-			filt_image[row][col] = hozSum(t0) / 159;
+			filt_image[row][col] = hsumAlternative(t0) / 159;
 		}
 
 		// padding required to avoid going out of bounds
-		for (col = 1008; col < M - 2; col++) {
+		for (col = 1009; col < M - 2; col++) {
 			int temp = 0;
 			for (int rowoffset = -2; rowoffset <= 2; rowoffset++) {
 				for (int coloffset = -2; coloffset <= 2; coloffset++) {
@@ -242,7 +307,7 @@ bool compare_Gaussian_images() {
 			newPixel = newPixel / 159;
 			if (newPixel != filt_image[row][col]) {
 				printf("\n %d %d - %d %d\n", row, col, newPixel, filt_image[row][col]);
-				if (count == 9 & !passed)
+				if (!passed && count == 9)
 					return false;
 				passed = false;
 				count++;
