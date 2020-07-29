@@ -81,18 +81,19 @@ void Gaussian_Blur_AVX() {
 
 	int row, col;
 
-	//NxN convolution
+	//NxN convolution kernel for 1st output pixel
 	const0 = _mm256_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 4, 5, 4, 2);
 	const1 = _mm256_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 9, 12, 9, 4);
 	const2 = _mm256_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 12, 15, 12, 5);
 
+	//NxN convolution kernel for 2nd output pixel
 	const3 = _mm256_set_epi16(0, 0, 0, 0, 0, 0, 2, 4, 5, 4, 2, 0, 0, 0, 0, 0);
 	const4 = _mm256_set_epi16(0, 0, 0, 0, 0, 0, 4, 9, 12, 9, 4, 0, 0, 0, 0, 0);
 	const5 = _mm256_set_epi16(0, 0, 0, 0, 0, 0, 5, 12, 15, 12, 5, 0, 0, 0, 0, 0);
 
 	for (row = 2; row < N - 2; row++) {
 		// Avoid going out of bounds M-15
-		for (col = 2; col < M; col += 11) {
+		for (col = 2; col < M-15; col += 11) {
 			for (int col2 = 0; col2 < 6; col2++) {
 				// Load 256 bits of packed integers from 5 adjacent rows
 				r0 = _mm256_loadu_si256((__m256i*) & in_image[row - 2][col + col2 - 2]);
@@ -118,8 +119,9 @@ void Gaussian_Blur_AVX() {
 				int firstOutputPixel = hsumAlternative(r5) / 159;
 				filt_image[row][col + col2] = firstOutputPixel;
 
-				if (col + col2 + 12 == 1021)
+				if (col + col2 + 5 > 1013) {
 					continue;
+				}
 
 				// Multiply each row by corresponding kernel row for second output pixel
 				r5 = _mm256_mullo_epi16(r0, const3);
@@ -134,7 +136,7 @@ void Gaussian_Blur_AVX() {
 				r5 = _mm256_add_epi16(r5, r8);
 				r9 = _mm256_add_epi16(r5, r9);
 
-				int secondOutputPixel = hsumAlternative(r9) /159;
+				int secondOutputPixel = hsumAlternative(r9) / 159;
 
 				// Calculate output pixel and normalise it by dividing by sum of kernel
 
@@ -143,18 +145,17 @@ void Gaussian_Blur_AVX() {
 		}
 
 		// padding required to avoid going out of bounds
-		//for (col = 1021; col < M - 2; col++) {
-
-		col = 1021;
+		for (col = 1014; col < M - 2; col++) {
 			int temp = 0;
 			for (int rowoffset = -2; rowoffset <= 2; rowoffset++) {
 				for (int coloffset = -2; coloffset <= 2; coloffset++) {
 					temp += in_image[row + rowoffset][col + coloffset] * gaussianMask[2 + rowoffset][2 + coloffset];
 				}
 			}
+
 			// Calculate output pixel and normalise it by dividing by sum of kernel
 			filt_image[row][col] = temp / 159;
-		//}
+		}
 	}
 }
 
