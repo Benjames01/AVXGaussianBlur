@@ -1,6 +1,5 @@
 #include "Header.h"
 #include <fstream>
-#include <iomanip>
 
 using namespace std;
 
@@ -17,103 +16,7 @@ int hsumAlternative(__m256i vec) {
 	__m128i hi32 = _mm_shuffle_epi32(sum64, _MM_SHUFFLE(2, 3, 0, 1));	// Swap two low elements
 	__m128i sum32 = _mm_add_epi32(sum64, hi32);
 
-
 	return _mm_cvtsi128_si32(sum32);
-}
-
-void printVector(__m256i vec, string name) {
-	uint16_t* i = (uint16_t*)&vec;
-	cout << name;
-	for (int x = 0; x < 16; x++) {
-		cout << i[x] << " ";
-	}
-	cout << endl;
-}
-
-void Gaussian_Blur_AVX_mop() {
-	__m256i r0, r1, r2, r3, r4, t0;
-	__m256i r5, r6, r7, r8, r9;
-
-	__m256i const0, const1, const2;
-	__m256i const3, const4, const5;
-
-	int row, col;
-
-	//NxN convolution
-	const0 = _mm256_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 4, 5, 4, 2);
-	const1 = _mm256_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 9, 12, 9, 4);
-	const2 = _mm256_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 12, 15, 12, 5);
-
-	const3 = _mm256_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 4, 5, 4, 2, 0, 0);
-	const4 = _mm256_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 9, 12, 9, 4, 0, 0);
-	const5 = _mm256_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 12, 15, 12, 2, 0, 0);
-
-	for (row = 2; row < N - 2; row++) {
-		// Avoid going out of bounds M-15
-		for (col = 2; col < M - 15; col += 6) {
-
-			for (int col2 = 0; col2 < 6; col2++) {
-				t0 = _mm256_setzero_si256();
-				
-				// Load 256 bits of packed integers from 5 adjacent rows
-				r0 = _mm256_loadu_si256((__m256i*) & in_image[row - 2][col + col2 - 2]);
-				r1 = _mm256_loadu_si256((__m256i*) & in_image[row - 1][col + col2 - 2]);
-				r2 = _mm256_loadu_si256((__m256i*) & in_image[row][col + col2 - 2]);
-				r3 = _mm256_loadu_si256((__m256i*) & in_image[row + 1][col + col2 - 2]);
-				r4 = _mm256_loadu_si256((__m256i*) & in_image[row + 2][col + col2 - 2]);
-
-				// Multiply each row by corresponding kernel row
-				r5 = _mm256_mullo_epi16(r0, const0);
-				r6 = _mm256_mullo_epi16(r1, const1);
-				r7 = _mm256_mullo_epi16(r2, const2);
-				r8 = _mm256_mullo_epi16(r3, const1);
-				r9 = _mm256_mullo_epi16(r4, const0);
-
-				// Calculate the sum of the adjacent rows
-				t0 = _mm256_add_epi16(t0, r5);
-				t0 = _mm256_add_epi16(t0, r6);
-				t0 = _mm256_add_epi16(t0, r7);
-				t0 = _mm256_add_epi16(t0, r8);
-				t0 = _mm256_add_epi16(t0, r9);
-
-				int firstOutputPixel = hsumAlternative(t0) / 159;
-				filt_image[row][col + col2] = firstOutputPixel;
-
-				if (col + col2 + 12 == 1021)
-					continue;
-
-				r5 = _mm256_mullo_epi16(r0, const3);
-				r6 = _mm256_mullo_epi16(r1, const4);
-				r7 = _mm256_mullo_epi16(r2, const5);
-				r8 = _mm256_mullo_epi16(r3, const4);
-				r9 = _mm256_mullo_epi16(r4, const3);
-
-				t0 = _mm256_add_epi16(t0, r5);
-				t0 = _mm256_add_epi16(t0, r6);
-				t0 = _mm256_add_epi16(t0, r7);
-				t0 = _mm256_add_epi16(t0, r8);
-				t0 = _mm256_add_epi16(t0, r9);
-
-				int secondOutputPixel = hsumAlternative(t0) / 159;
-
-				// Calculate output pixel and normalise it by dividing by sum of kernel
-				
-				filt_image[row][col + col2 + 12] = secondOutputPixel;	
-			}
-		}
-
-		// padding required to avoid going out of bounds
-		for (col = 1009; col < M - 2; col++) {
-			int temp = 0;
-			for (int rowoffset = -2; rowoffset <= 2; rowoffset++) {
-				for (int coloffset = -2; coloffset <= 2; coloffset++) {
-					temp += in_image[row + rowoffset][col + coloffset] * gaussianMask[2 + rowoffset][2 + coloffset];
-				}
-			}
-			// Calculate output pixel and normalise it by dividing by sum of kernel
-			filt_image[row][col] = temp / 159;
-		}
-	}
 }
 
 int main() {
@@ -133,10 +36,8 @@ int main() {
 	auto start = std::chrono::high_resolution_clock::now();
 
 	for (int it = 0; it != TIMES; it++) {
-		//Gaussian_Blur_default_unrolled();
-		//Gaussian_Blur_AVX_mop(); // Average: 6.52933 for TIMES=500
-		//Gaussian_Blur_AVX(); // Average:  5.12537 s for TIMES=500
-		//Gaussian_Blur_default(); // Average: 11.8869 s for TIMES=500
+		Gaussian_Blur_AVX(); // Average: 6.50493 s for TIMES=1000
+		//Gaussian_Blur_default(); // Average: 22.8869 s for TIMES=1000
 	}
 	auto finish = std::chrono::high_resolution_clock::now();
 	std::chrono::duration<double> elapsed = finish - start;
@@ -172,8 +73,11 @@ int main() {
 }
 
 void Gaussian_Blur_AVX() {
-	__m256i r0, r1, r2, r3, r4, t0;
+	__m256i r0, r1, r2, r3, r4;
+	__m256i r5, r6, r7, r8, r9, t0;
+
 	__m256i const0, const1, const2;
+	__m256i const3, const4, const5;
 
 	int row, col;
 
@@ -182,37 +86,66 @@ void Gaussian_Blur_AVX() {
 	const1 = _mm256_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 9, 12, 9, 4);
 	const2 = _mm256_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 12, 15, 12, 5);
 
+	const3 = _mm256_set_epi16(0, 0, 0, 0, 0, 0, 2, 4, 5, 4, 2, 0, 0, 0, 0, 0);
+	const4 = _mm256_set_epi16(0, 0, 0, 0, 0, 0, 4, 9, 12, 9, 4, 0, 0, 0, 0, 0);
+	const5 = _mm256_set_epi16(0, 0, 0, 0, 0, 0, 5, 12, 15, 12, 5, 0, 0, 0, 0, 0);
+
 	for (row = 2; row < N - 2; row++) {
-		for (col = 2; col < M - 15; col++) {
-			t0 = _mm256_setzero_si256();
+		// Avoid going out of bounds M-15
+		for (col = 2; col < M; col += 11) {
+			for (int col2 = 0; col2 < 6; col2++) {
+				// Load 256 bits of packed integers from 5 adjacent rows
+				r0 = _mm256_loadu_si256((__m256i*) & in_image[row - 2][col + col2 - 2]);
+				r1 = _mm256_loadu_si256((__m256i*) & in_image[row - 1][col + col2 - 2]);
+				r2 = _mm256_loadu_si256((__m256i*) & in_image[row][col + col2 - 2]);
+				r3 = _mm256_loadu_si256((__m256i*) & in_image[row + 1][col + col2 - 2]);
+				r4 = _mm256_loadu_si256((__m256i*) & in_image[row + 2][col + col2 - 2]);
 
-			// Load 256 bits of packed integers from 5 adjacent rows
-			r0 = _mm256_loadu_si256((__m256i*) & in_image[row - 2][col - 2]);
-			r1 = _mm256_loadu_si256((__m256i*) & in_image[row - 1][col - 2]);
-			r2 = _mm256_loadu_si256((__m256i*) & in_image[row][col - 2]);
-			r3 = _mm256_loadu_si256((__m256i*) & in_image[row + 1][col - 2]);
-			r4 = _mm256_loadu_si256((__m256i*) & in_image[row + 2][col - 2]);
+				// Multiply each row by corresponding kernel row
+				r5 = _mm256_mullo_epi16(r0, const0);
+				r6 = _mm256_mullo_epi16(r1, const1);
+				r7 = _mm256_mullo_epi16(r2, const2);
+				r8 = _mm256_mullo_epi16(r3, const1);
+				r9 = _mm256_mullo_epi16(r4, const0);
 
-			// Multiply each row by corresponding kernel row
-			r0 = _mm256_mullo_epi16(r0, const0);
-			r1 = _mm256_mullo_epi16(r1, const1);
-			r2 = _mm256_mullo_epi16(r2, const2);
-			r3 = _mm256_mullo_epi16(r3, const1);
-			r4 = _mm256_mullo_epi16(r4, const0);
+				// Vertically add the adjacent rows
+				r5 = _mm256_add_epi16(r5, r6);
+				r5 = _mm256_add_epi16(r5, r7);
+				r5 = _mm256_add_epi16(r5, r8);
+				r5 = _mm256_add_epi16(r5, r9);
 
-			// Calculate the sum of the adjacent rows
-			t0 = _mm256_add_epi16(t0, r0);
-			t0 = _mm256_add_epi16(t0, r1);
-			t0 = _mm256_add_epi16(t0, r2);
-			t0 = _mm256_add_epi16(t0, r3);
-			t0 = _mm256_add_epi16(t0, r4);
+				// Calculate output pixel and normalise it by dividing by sum of kernel
+				int firstOutputPixel = hsumAlternative(r5) / 159;
+				filt_image[row][col + col2] = firstOutputPixel;
 
-			// Calculate output pixel and normalise it by dividing by sum of kernel
-			filt_image[row][col] = hsumAlternative(t0) / 159;
+				if (col + col2 + 12 == 1021)
+					continue;
+
+				// Multiply each row by corresponding kernel row for second output pixel
+				r5 = _mm256_mullo_epi16(r0, const3);
+				r6 = _mm256_mullo_epi16(r1, const4);
+				r7 = _mm256_mullo_epi16(r2, const5);
+				r8 = _mm256_mullo_epi16(r3, const4);
+				r9 = _mm256_mullo_epi16(r4, const3);
+
+				// Vertically add the adjacent rows
+				r5 = _mm256_add_epi16(r5, r6);
+				r5 = _mm256_add_epi16(r5, r7);
+				r5 = _mm256_add_epi16(r5, r8);
+				r9 = _mm256_add_epi16(r5, r9);
+
+				int secondOutputPixel = hsumAlternative(r9) /159;
+
+				// Calculate output pixel and normalise it by dividing by sum of kernel
+
+				filt_image[row][col + col2 + 5] = secondOutputPixel;
+			}
 		}
 
 		// padding required to avoid going out of bounds
-		for (col = 1009; col < M - 2; col++) {
+		//for (col = 1021; col < M - 2; col++) {
+
+		col = 1021;
 			int temp = 0;
 			for (int rowoffset = -2; rowoffset <= 2; rowoffset++) {
 				for (int coloffset = -2; coloffset <= 2; coloffset++) {
@@ -221,7 +154,7 @@ void Gaussian_Blur_AVX() {
 			}
 			// Calculate output pixel and normalise it by dividing by sum of kernel
 			filt_image[row][col] = temp / 159;
-		}
+		//}
 	}
 }
 

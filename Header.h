@@ -12,7 +12,7 @@
 
 #define N 1024
 #define M 1024
-#define TIMES 500
+#define TIMES 1000
 
 #define P 1024
 
